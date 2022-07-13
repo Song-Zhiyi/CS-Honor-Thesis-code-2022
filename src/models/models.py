@@ -116,7 +116,7 @@ class EpochResult(object):
                 metrics.precision_recall_fscore_support(
                     np.concatenate(self.train_x_true),
                     np.concatenate(self.train_x_pred),
-                    average="weighted"
+                    average="weighted", zero_division=1,
                 )
             )
         if len(self.val_x_true) > 0 and len(self.val_x_pred) > 0:
@@ -124,7 +124,7 @@ class EpochResult(object):
                 metrics.precision_recall_fscore_support(
                     np.concatenate(self.val_x_true),
                     np.concatenate(self.val_x_pred),
-                    average="weighted"
+                    average="weighted", zero_division=1,
                 )
             )
 
