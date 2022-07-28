@@ -105,6 +105,7 @@ class Experiment:
             save_path=(self.exp_save_dir),
             train_meta=meta,
             train_id=meta.safe_id(),
+            save_model=False,
         ) as trainer:
             trainer.do_train(meta.n_epoch, progress)
             return trainer.train_id
@@ -129,7 +130,8 @@ def exp_embeddings(
         n_epoch: int=N_EPOCH,
         n_repeats: int=N_REPEATS,
         chunk_size: int=3000,
-        progress_pos: int=2):
+        progress_pos: int=2,
+        drop_out: float=None):
     emb = load_embedding_file(emb_path)
     exp = Experiment(
         X=X, y=y, embeddings=emb,
@@ -140,6 +142,7 @@ def exp_embeddings(
         n_epoch=n_epoch,
         n_repeats=n_repeats,
         progress_pos=progress_pos,
+        drop_out=drop_out,
     )
     return exp
 

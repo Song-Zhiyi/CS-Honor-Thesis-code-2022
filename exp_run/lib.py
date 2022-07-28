@@ -59,11 +59,15 @@ class Experiment:
             save_dir: os.PathLike="result",
             progress: bool=True,
             progress_pos: int=2,
+            drop_out: float=None,
+
+            data_train_dup: int = 1,
         ):
             self.exp_save_dir = Path(save_dir).expanduser() / experiment_id
             self.logger = logging.getLogger("e.experiment")
             self.experiment_id = experiment_id
             self.metas = []
+            self.drop_out = drop_out
             for repeat_id in range(n_repeats):
                 self.metas.append(
                     TrainMetadata(
@@ -80,7 +84,7 @@ class Experiment:
 
             self.n, self.input_size = X.shape
             self.n_class = len(np.unique(y))
-            self.dat_train, self.dat_val = prepare_tensor_dataset(X, y, chunk_size, validation_ratio)
+            self.dat_train, self.dat_val = prepare_tensor_dataset(X, y, chunk_size, validation_ratio, shuffle=True, dup=data_train_dup)
 
             self.show_progress = progress
             self.progress_pos = progress_pos
@@ -97,14 +101,16 @@ class Experiment:
             leave=False,
         )
         with Trainer(
-            model=LSTMTagger(input_size=self.input_size, hidden_size=256,
-                             output_size=self.n_class, loss_function=nn.CrossEntropyLoss()),
+            model=LSTMTagger(input_size=self.input_size, hidden_size=128,
+                             output_size=self.n_class, loss_function=nn.CrossEntropyLoss(), drop_out=self.drop_out),
             train_data=self.dat_train,
             val_data=self.dat_val,
             optimizer=optim.Adam,
+            lr=0.001,
             save_path=(self.exp_save_dir),
             train_meta=meta,
             train_id=meta.safe_id(),
+            save_model=False,
         ) as trainer:
             trainer.do_train(meta.n_epoch, progress)
             return trainer.train_id
@@ -129,7 +135,10 @@ def exp_embeddings(
         n_epoch: int=N_EPOCH,
         n_repeats: int=N_REPEATS,
         chunk_size: int=3000,
-        progress_pos: int=2):
+        progress_pos: int=2,
+        drop_out: float=None,
+        **kw
+    ):
     emb = load_embedding_file(emb_path)
     exp = Experiment(
         X=X, y=y, embeddings=emb,
@@ -140,6 +149,8 @@ def exp_embeddings(
         n_epoch=n_epoch,
         n_repeats=n_repeats,
         progress_pos=progress_pos,
+        drop_out=drop_out,
+        **kw
     )
     return exp
 

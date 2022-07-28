@@ -230,6 +230,7 @@ class Experiment:
             save_path=(self.exp_save_dir),
             train_meta=meta,
             train_id=meta.safe_id(),
+            save_model=False,
         ) as trainer:
             trainer.do_train(meta.n_epoch, progress)
             return trainer.train_id

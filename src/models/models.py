@@ -50,9 +50,23 @@ def data_chunk(X, Y, chunk_size):
 
     return np.array(Xs), np.array(Ys)
 
-def prepare_tensor_dataset(X: np.ndarray, Y: np.ndarray, chunk_size: int, validation_ratio: float, shuffle: bool=False):
+
+def dup_data(dat: np.ndarray, dup: int=1):
+    if dup == 1:
+        return dat
+    return np.concatenate(list(dat for _ in range(dup)))
+
+def prepare_tensor_dataset(X: np.ndarray, Y: np.ndarray, chunk_size: int,
+                           validation_ratio: float, shuffle: bool = False,
+                           dup: int = 1):
     X_train, X_test, Y_train, Y_test = train_test_split(
-        *data_chunk(X, Y, chunk_size), test_size=validation_ratio, shuffle=False)
+        *data_chunk(X, Y, chunk_size), test_size=validation_ratio, shuffle=shuffle)
+
+    X_train = dup_data(X_train, dup)
+    Y_train = dup_data(Y_train, dup)
+    #X_test = dup_data(X_test, dup)
+    #Y_test = dup_data(Y_test, dup)
+
     train_data = TensorDataset(
         torch.from_numpy(X_train), torch.from_numpy(Y_train))
     test_data = TensorDataset(
@@ -111,12 +125,29 @@ class EpochResult(object):
         if self._done:
             return
         self._done = True
+
+        from collections import Counter
+        from pprint import pprint
+
+        def foo(s, a, b):
+            a = np.concatenate(a)
+            b = np.concatenate(b)
+
+            from icecream import ic
+            ic(metrics.classification_report(a, b, zero_division=0))
+            ic(f"----------- {s} {np.sum(a == b)}/{len(a)} -------------------")
+            ic(Counter(a))
+            ic(Counter(b))
+
+        foo("val", self.val_x_true, self.val_x_pred)
+        foo("train", self.train_x_true, self.train_x_pred)
+
         if len(self.train_x_true) > 0 and len(self.train_x_pred) > 0:
             self.train_precision, self.train_recall, self.train_f1, _ = (
                 metrics.precision_recall_fscore_support(
                     np.concatenate(self.train_x_true),
                     np.concatenate(self.train_x_pred),
-                    average="weighted", zero_division=1,
+                    average="weighted", zero_division=0,
                 )
             )
         if len(self.val_x_true) > 0 and len(self.val_x_pred) > 0:
@@ -124,7 +155,7 @@ class EpochResult(object):
                 metrics.precision_recall_fscore_support(
                     np.concatenate(self.val_x_true),
                     np.concatenate(self.val_x_pred),
-                    average="weighted", zero_division=1,
+                    average="weighted", zero_division=0,
                 )
             )
 
@@ -167,7 +198,7 @@ class LSTMTagger(nn.Module):
     def __init__(
             self, input_size: int, hidden_size: int, output_size: int,
             loss_function: Callable, bidirectional=True,
-            dropout: float = 0, num_layers: int = 1,
+            dropout: float = 0, num_layers: int = 1, drop_out: float=None,
             device=default_device):
         super().__init__()
         self.logger = logging.getLogger("e.models.LSTMTagger")
@@ -186,10 +217,16 @@ class LSTMTagger(nn.Module):
         else:
             self._linear = nn.Linear(hidden_size, output_size, device=device)
 
+        if drop_out is not None:
+            self._drop = nn.Dropout(drop_out)
+        else:
+            self._drop = None
         self.loss_function = loss_function
 
     def forward(self, X):
         tmp, _ = self._lstm(X)
+        if self._drop is not None:
+            tmp = self._drop(tmp)
         tmp = self._linear(tmp)
         return tmp
 
@@ -210,14 +247,14 @@ class Trainer(object):
     def __init__(self, model: LSTMTagger, train_data: TensorDataset, val_data: TensorDataset,
                  save_path: os.PathLike, optimizer=optim.Adam,
                  device=default_device, lr_scheduler=None, debug=1,
-                 train_meta: TrainMetadata=None,
-                 train_id=None):
+                 train_meta: TrainMetadata=None, lr: float=0.001,
+                 train_id=None, save_model: bool=False):
         self.model = model
         self.model.to(default_device)
         self.train_data = train_data
         self.val_data = val_data
         self.lr_scheduler = lr_scheduler
-        self.optimizer = optimizer(params=model.parameters(), lr=0.001)
+        self.optimizer = optimizer(params=model.parameters(), lr=lr)
         self.device = device
         if train_id is None:
             train_id = str(datetime.now())
@@ -229,6 +266,7 @@ class Trainer(object):
         self.current_epoch = 0
         self.train_result: list[EpochResult] = []
         self.debug = debug
+        self.save_model = save_model
 
     def __enter__(self):
         return self
@@ -249,6 +287,9 @@ class Trainer(object):
             return list(sorted(self.train_result, key=lambda r: r.val_accuracy))
 
     def save_best(self, method):
+        if not self.save_model:
+            return
+
         bests = self.get_best_results(method=method)
         best = bests[0]
         save_path = self.save_path / f"epoch{best.epoch:04d}"
