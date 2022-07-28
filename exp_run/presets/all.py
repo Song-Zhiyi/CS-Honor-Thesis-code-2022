@@ -40,7 +40,7 @@ def build_preset_from_dat(data: pd.DataFrame, exp_name: str, repeat: int):
     coord_emb = build_sensor_coord_emb()
 
     CHUNK_SIZE = 200
-    EPOCH = 1
+    EPOCH = 100
     DATA_TRAIN_DUP = 8
     DROP_OUT = None
 
