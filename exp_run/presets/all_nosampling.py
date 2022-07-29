@@ -90,4 +90,6 @@ def build_preset_from_dat(data: pd.DataFrame, exp_name: str, repeat: int):
 
 
 def build_preset(exp_name: str, repeat: int = N_REPEATS):
-    return build_preset_from_dat(lib.dat, exp_name, repeat)
+    return (
+        build_preset_from_dat(data_prep.dat_nosampling, exp_name, repeat)
+    )
